@@ -1,0 +1,60 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql" // Supabase uses PostgreSQL
+  url       = env("DATABASE_URL") // Make sure this is set in your .env.local
+  directUrl = env("DATABASE_URL") // Optional: For migrations if needed via Supabase pooling
+}
+
+// Enum for player colors / winner identity
+enum Player {
+  RED
+  BLUE
+}
+
+// Enum for the status of a game
+enum GameStatus {
+  WAITING // Waiting for player 2
+  ACTIVE // Game in progress
+  COMPLETED // Game finished (win or tie)
+  ABANDONED // Optional: If a player leaves prematurely
+}
+
+// Model representing a single game session
+model Game {
+  id        String     @id @default(cuid()) // Unique game ID
+  status    GameStatus @default(WAITING) // Current status of the game
+  winner    Player? // Who won? Null if active, tie, or waiting
+  isTie     Boolean    @default(false) // Flag specifically for tie games
+
+  player1Id String // Identifier for Player 1 (Red) - could be user ID later
+  player2Id String? // Identifier for Player 2 (Blue) - null initially
+
+  moves     Move[] // Relation to moves made in this game
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Model representing a single move within a game
+model Move {
+  id        String   @id @default(cuid()) // Unique move ID
+  gameId    String // Foreign key to the Game
+  playerId  String // Identifier for the player who made the move (matches Game player1Id/player2Id)
+  player    Player // Which color piece was dropped (RED or BLUE)
+  column    Int // The column index (0-6) where the piece was dropped
+  moveOrder Int // The sequence number of the move within the game (1, 2, 3...)
+
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade) // Relation back to the Game
+
+  createdAt DateTime @default(now())
+
+  // Ensure a player can't make two moves in the same turn within a game
+  @@unique([gameId, moveOrder])
+  // Index for quickly fetching moves for a game in order
+  @@index([gameId, moveOrder])
+}

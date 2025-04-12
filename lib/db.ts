@@ -13,8 +13,10 @@ declare global {
 export const db =
   globalThis.prisma ||
   new PrismaClient({
-    // Optional: You can configure logging here if needed during development
-    // log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
+    log:
+      process.env.NODE_ENV === "development"
+        ? ["query", "error", "warn"]
+        : ["error"],
   });
 
 // In development, assign the client instance to the global object.

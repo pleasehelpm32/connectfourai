@@ -1,123 +1,212 @@
 // app/(game)/page.tsx
 "use client";
 
-import React, { useState, useTransition } from "react"; // Import useTransition
-import { toast } from "sonner"; // Import Sonner toast
-import { createTestGame } from "@/app/actions/matchmakingActions";
+import React, { useState, useTransition, useEffect } from "react";
+import { toast } from "sonner";
 import GameBoard from "@/components/game/GameBoard";
 import GameInfo from "@/components/game/GameInfo";
-// Import game logic and types
-import {
-  createInitialBoard,
-  makeMove,
-  checkWin,
-  checkTie,
-  ROWS,
-  COLS,
-} from "@/lib/gameLogic";
-import type { Player, BoardState, SlotState } from "@/lib/types";
-// Import the Server Action
+import { createInitialBoard, makeMove } from "@/lib/gameLogic";
+import type { Player, BoardState } from "@/lib/types";
+
 import { handleMakeMove } from "@/app/actions/gameActions";
-
-// (Keep Player type alias if needed)
-// type Player = 'RED' | 'BLUE';
-
+import {
+  findOrCreateGame,
+  checkGameStatus,
+} from "@/app/actions/matchmakingActions";
+import type { GameStatus } from "@prisma/client"; // Import Prisma enum type
+import { getGameCounts } from "@/app/actions/countActions";
 interface GamePageState {
   turn: Player | null;
   playerCount: number;
   queueCount: number;
   board: BoardState;
   gameId: string | null;
-  winner: Player | "TIE" | null; // Add winner state
-  gameStatus: "WAITING" | "ACTIVE" | "COMPLETED"; // Track game status
+  winner: Player | "TIE" | null;
+  gameStatus: GameStatus; // Use Prisma enum type
+  myColor: Player | null; // Store the color assigned to this client
 }
 
 export default function GamePage() {
-  const [isPending, startTransition] = useTransition(); // Hook for loading state
+  const [isPending, startTransition] = useTransition();
+  // Add transition state specifically for finding game
+  const [isFindingGame, startFindingGameTransition] = useTransition();
+
   const [status, setStatus] = useState<GamePageState>({
     turn: null,
     playerCount: 0,
     queueCount: 0,
     board: createInitialBoard(),
     gameId: null,
-    winner: null, // Initialize winner
-    gameStatus: "WAITING", // Initial status
+    winner: null,
+    gameStatus: "WAITING" as GameStatus, // Default to WAITING initially
+    myColor: null, // Initialize player color as null
   });
 
-  // Find Game simulation (Keep as is for now, will integrate matchmaking later)
-  const handleFindGame = async () => {
-    console.log("Finding game...");
-    try {
-      const newGame = await createTestGame();
-      setStatus((prev) => ({
-        ...prev,
-        turn: "RED",
-        board: createInitialBoard(),
-        gameId: newGame.id, // Use the real game ID from the database
-        winner: null,
-        gameStatus: "ACTIVE",
-      }));
-      toast.info("New game started. Red's turn!");
-    } catch (error) {
-      console.error("Error creating test game:", error);
-      toast.error("Failed to create game");
-    }
+  // In game/page.tsx, update the useEffect:
+  useEffect(() => {
+    // Function to fetch counts and update state
+    const fetchCounts = async () => {
+      try {
+        // Get player counts
+        const counts = await getGameCounts();
+
+        // Update state with new counts
+        setStatus((prev) => ({
+          ...prev,
+          playerCount: counts.playingCount,
+          queueCount: counts.waitingCount,
+        }));
+
+        // If we have a gameId, check for game updates (both for waiting and active games)
+        if (status.gameId) {
+          const gameStatus = await checkGameStatus(status.gameId);
+
+          if (gameStatus.success) {
+            // Check if there are any meaningful updates
+            const boardChanged =
+              gameStatus.board &&
+              JSON.stringify(gameStatus.board) !== JSON.stringify(status.board);
+            const statusChanged = gameStatus.status !== status.gameStatus;
+            const turnChanged = gameStatus.turn !== status.turn;
+            const winnerChanged = gameStatus.winner !== status.winner;
+
+            // Update state if anything has changed
+            if (boardChanged || statusChanged || turnChanged || winnerChanged) {
+              setStatus((prev) => ({
+                ...prev,
+                gameStatus: gameStatus.status as GameStatus,
+                turn: gameStatus.turn,
+                winner: gameStatus.winner || null,
+                board: gameStatus.board || prev.board,
+              }));
+
+              // Show toast messages for key state changes
+              if (
+                gameStatus.status === "ACTIVE" &&
+                status.gameStatus !== "ACTIVE"
+              ) {
+                toast.success("Game started! Opponent has joined.");
+              }
+
+              if (
+                gameStatus.status === "COMPLETED" &&
+                status.gameStatus !== "COMPLETED"
+              ) {
+                if (gameStatus.winner === "TIE") {
+                  toast.success("Game Over: It's a TIE!");
+                } else if (gameStatus.winner) {
+                  toast.success(`Game Over: ${gameStatus.winner} Wins!`);
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Polling error:", error);
+      }
+    };
+
+    // Fetch counts immediately on component mount
+    fetchCounts();
+
+    // Set up interval to poll more frequently (every 2 seconds)
+    const intervalId = setInterval(fetchCounts, 2000);
+
+    // Cleanup function to clear interval when component unmounts
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [
+    status.gameId,
+    status.gameStatus,
+    status.turn,
+    status.winner,
+    status.board,
+  ]);
+
+  // Function to find/create game using server action
+  const handleFindGame = () => {
+    startFindingGameTransition(async () => {
+      console.log("Attempting to find or create game...");
+      try {
+        const result = await findOrCreateGame();
+
+        if (
+          result.success &&
+          result.gameId &&
+          result.playerColor &&
+          result.board
+        ) {
+          setStatus((prev) => ({
+            ...prev,
+            gameId: result.gameId || null,
+            myColor: result.playerColor || null,
+            board: result.board || createInitialBoard(),
+            turn: result.turn || null,
+            gameStatus: result.status as GameStatus,
+            winner: null,
+          }));
+          toast.info(result.message);
+        } else {
+          console.error("Matchmaking failed:", result.message);
+          toast.error(result.message || "Failed to find or create game.");
+        }
+      } catch (error) {
+        console.error("Error in findOrCreateGame:", error);
+        toast.error("An unexpected error occurred while finding a game.");
+      }
+    });
   };
 
-  // Function to handle column clicks - NOW calls server action
+  // Function to handle column clicks
   const handleColumnClick = (columnIndex: number) => {
-    // Prevent moves if game is over, not active, or action is pending
+    // Prevent moves if not active, not player's turn, action pending, or color not assigned
     if (
       status.gameStatus !== "ACTIVE" ||
       !status.turn ||
       !status.gameId ||
-      isPending
+      isPending ||
+      status.turn !== status.myColor
     ) {
+      if (status.turn && status.myColor && status.turn !== status.myColor) {
+        toast.warning("Not your turn!");
+      }
       console.log("Move prevented:", {
         status: status.gameStatus,
         turn: status.turn,
+        myColor: status.myColor,
         gameId: status.gameId,
         isPending,
       });
       return;
     }
 
-    // Get current player before starting transition
     const currentPlayer = status.turn;
-    const currentBoard = status.board; // Store current board for local update
+    const currentBoard = status.board;
 
-    // Start transition for the server action call
     startTransition(async () => {
       try {
-        // --- Call the Server Action ---
         const result = await handleMakeMove(status.gameId, columnIndex);
-        // --- Handle the Result ---
-        if (result.success && result.newState) {
-          // Apply the move locally ONLY IF server confirmed success
-          const nextBoard = makeMove(currentBoard, columnIndex, currentPlayer); // Use the same logic locally
 
-          // Update state based on server's confirmed new state
+        if (result.success && result.newState) {
+          const nextBoard = makeMove(currentBoard, columnIndex, currentPlayer);
+
           setStatus((prev) => ({
             ...prev,
-            board: nextBoard, // Update board locally
+            board: nextBoard,
             turn: result.newState!.turn,
             winner: result.newState!.winner,
-            gameStatus: result.newState!.status,
+            gameStatus: result.newState!.status as GameStatus,
           }));
 
-          // Announce winner/tie with toast
           if (result.newState.winner) {
             if (result.newState.winner === "TIE") {
               toast.success("Game Over: It's a TIE!");
             } else {
               toast.success(`Game Over: ${result.newState.winner} Wins!`);
             }
-          } else {
-            // Optional: Toast for successful move
-            // toast.success(`Move by ${currentPlayer} successful.`);
           }
         } else {
-          // Show error toast if action failed
           console.error("Server Action failed:", result.message);
           toast.error(result.message || "Failed to make move.");
         }
@@ -125,7 +214,7 @@ export default function GamePage() {
         console.error("Error calling server action:", error);
         toast.error("An unexpected error occurred while making the move.");
       }
-    }); // End of startTransition
+    });
   };
 
   return (
@@ -139,13 +228,18 @@ export default function GamePage() {
         <div className="flex-shrink-0">
           <GameBoard
             boardState={status.board}
-            // Disable board clicks if game not active, or during server action
-            disabled={status.gameStatus !== "ACTIVE" || isPending}
+            // Disable board clicks if game not active, not user's turn, or during actions
+            disabled={
+              status.gameStatus !== "ACTIVE" ||
+              status.turn !== status.myColor ||
+              isPending ||
+              isFindingGame
+            }
             onColumnClick={handleColumnClick}
           />
-          {isPending && (
+          {(isPending || isFindingGame) && (
             <p className="text-center mt-2 text-sm text-gray-500">
-              Processing move...
+              {isFindingGame ? "Finding game..." : "Processing move..."}
             </p>
           )}
         </div>
@@ -154,12 +248,14 @@ export default function GamePage() {
         <div className="w-full lg:w-64 flex-shrink-0">
           <GameInfo
             turn={status.turn}
-            playerCount={status.playerCount} // Still placeholder counts
-            queueCount={status.queueCount} // Still placeholder counts
+            playerCount={status.playerCount}
+            queueCount={status.queueCount}
             onPlayClick={handleFindGame}
-            // Pass winner and status to GameInfo
             winner={status.winner}
             gameStatus={status.gameStatus}
+            gameId={status.gameId} // Pass gameId
+            findingGame={isFindingGame} // Pass finding game state
+            myColor={status.myColor}
           />
         </div>
       </div>

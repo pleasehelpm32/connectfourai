@@ -2,14 +2,18 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import type { Player } from "@/lib/types"; // Import Player type
-
+import type { GameStatus } from "@prisma/client";
+// In your GameInfo component:
 interface GameInfoProps {
   turn: Player | null;
   playerCount: number;
   queueCount: number;
   onPlayClick?: () => void;
-  winner: Player | "TIE" | null; // Receive winner status
-  gameStatus: "WAITING" | "ACTIVE" | "COMPLETED"; // Receive game status
+  winner: Player | "TIE" | null;
+  gameStatus: GameStatus;
+  gameId: string | null; // Add gameId to props
+  findingGame: boolean; // Add this to know when the "Find Game" action is in progress
+  myColor: Player | null;
 }
 
 const GameInfo: React.FC<GameInfoProps> = ({
@@ -19,11 +23,23 @@ const GameInfo: React.FC<GameInfoProps> = ({
   onPlayClick,
   winner,
   gameStatus,
+  gameId,
+  findingGame = false,
+  myColor,
 }) => {
   let statusText: string;
-  let statusColor: string = "text-gray-500"; // Default color
+  let statusColor: string = "text-gray-500";
 
-  if (gameStatus === "COMPLETED") {
+  // First check for finding game state
+  if (findingGame) {
+    statusText = "Finding a game...";
+  }
+  // Then check if no game found yet (and not currently finding)
+  else if (!gameId && !findingGame) {
+    statusText = "Click 'Find Game' to start";
+  }
+  // Then handle completed games
+  else if (gameStatus === "COMPLETED") {
     if (winner === "TIE") {
       statusText = "It's a TIE!";
       statusColor = "text-yellow-600 dark:text-yellow-400";
@@ -34,48 +50,62 @@ const GameInfo: React.FC<GameInfoProps> = ({
           ? "text-red-600 dark:text-red-400 font-bold"
           : "text-blue-600 dark:text-blue-400 font-bold";
     } else {
-      statusText = "Game Over"; // Should ideally have winner/tie if completed
+      statusText = "Game Over";
     }
-  } else if (gameStatus === "ACTIVE" && turn) {
+  }
+  // Then handle active games
+  else if (gameStatus === "ACTIVE" && turn) {
     statusText = `${turn}'s Turn`;
     statusColor =
       turn === "RED"
         ? "text-red-600 dark:text-red-400"
         : "text-blue-600 dark:text-blue-400";
-  } else {
-    statusText = "Waiting for game...";
+  }
+  // Finally, handle waiting games
+  else if (gameStatus === "WAITING") {
+    statusText = "Waiting for opponent...";
+  }
+  // Fallback
+  else {
+    statusText = "...";
   }
 
+  // Color indicator for current player
+  const colorIndicator = myColor ? `(You are ${myColor})` : "";
+
+  // Play button logic
+  const showPlayButton =
+    (!gameId || gameStatus === "WAITING" || gameStatus === "COMPLETED") &&
+    onPlayClick;
+  const playButtonText =
+    gameStatus === "COMPLETED" ? "Play Again?" : "Find Game";
+
   return (
-    <div className="p-4 rounded-lg bg-gray-100 dark:bg-gray-800 shadow-md text-center space-y-3 min-h-[150px]">
-      {" "}
-      {/* Added min-height */}
+    <div className="p-4 rounded-lg bg-gray-100 dark:bg-gray-800 shadow-md text-center space-y-3 min-h-[180px]">
       <h2 className="text-xl font-semibold">Game Status</h2>
-      {/* Status Text (Turn or Winner/Tie) */}
+      {/* Status Text */}
       <p className={`text-lg font-medium ${statusColor} h-6`}>
-        {" "}
-        {/* Added height to prevent layout shift */}
-        {statusText}
+        {statusText}{" "}
+        <span className="text-sm font-normal">{colorIndicator}</span>
       </p>
       {/* Player/Queue Counts */}
-      <div className="text-sm text-gray-600 dark:text-gray-400">
+      <div className="text-sm text-gray-600 dark:text-gray-400 mt-8">
         <span>Playing: {playerCount}</span> |{" "}
         <span>In Queue: {queueCount}</span>
       </div>
-      {/* Play Button - Conditionally render or disable */}
-      {(gameStatus === "WAITING" || gameStatus === "COMPLETED") &&
-        onPlayClick && (
-          <Button
-            onClick={onPlayClick}
-            variant="secondary"
-            size="lg"
-            className="mt-4"
-          >
-            {gameStatus === "COMPLETED" ? "Play Again?" : "Find Game"}
-          </Button>
-        )}
+      {/* Play Button */}
+      {showPlayButton && (
+        <Button
+          onClick={onPlayClick}
+          variant="secondary"
+          size="lg"
+          className="mt-4"
+          disabled={findingGame} // Disable while finding game
+        >
+          {findingGame ? "Connecting..." : playButtonText}
+        </Button>
+      )}
     </div>
   );
 };
-
 export default GameInfo;

@@ -30,6 +30,11 @@ export async function findOrCreateGame(): Promise<MatchmakingResult> {
   const newPlayerId = generatePlayerId(); // Generate an ID for the player requesting a game
 
   try {
+    console.log("Attempting database connection for matchmaking");
+
+    // Test database connection first
+    const testConnection = await db.$queryRaw`SELECT 1 as test`;
+    console.log("Database connection successful:", testConnection);
     // Use a transaction to prevent race conditions
     const result = await db.$transaction(async (tx) => {
       // 1. Look for a game waiting for player 2
@@ -92,6 +97,7 @@ export async function findOrCreateGame(): Promise<MatchmakingResult> {
 
     return result as MatchmakingResult; // Cast result
   } catch (error) {
+    console.error("Detailed error in findOrCreateGame:", error);
     console.error("Error in findOrCreateGame:", error);
     let errorMessage =
       "Failed to find or create game due to an unexpected error.";

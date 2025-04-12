@@ -1,8 +1,9 @@
 // app/actions/gameActions.ts
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use server"; // Mark this module as containing Server Actions
 
 import { Prisma } from "@prisma/client";
-import { revalidatePath } from "next/cache"; // To potentially trigger data refetching if needed later
+import { Player as PrismaPlayer } from "@prisma/client";
 
 import { db } from "@/lib/db"; // Your Prisma client instance
 import {
@@ -11,10 +12,9 @@ import {
   makeMove, // We'll use this to reconstruct the board
   checkWin,
   checkTie,
-  ROWS, // Import constants if needed
   COLS,
 } from "@/lib/gameLogic";
-import type { Player, BoardState, SlotState } from "@/lib/types";
+import type { Player, BoardState } from "@/lib/types";
 
 // Define a return type for the action
 interface ActionResult {
@@ -91,7 +91,7 @@ export async function handleMakeMove(
       data: {
         gameId: game.id,
         playerId: currentPlayerId,
-        player: currentPlayerColor,
+        player: currentPlayerColor as unknown as PrismaPlayer,
         column: column,
         moveOrder: newMoveOrder,
       },
@@ -114,7 +114,7 @@ export async function handleMakeMove(
         where: { id: gameId },
         data: {
           status: "COMPLETED",
-          winner: currentPlayerColor,
+          winner: currentPlayerColor as unknown as PrismaPlayer,
         },
       });
       console.log(`Game ${gameId} completed. Winner: ${currentPlayerColor}`);
@@ -130,9 +130,6 @@ export async function handleMakeMove(
       });
       console.log(`Game ${gameId} completed. Result: TIE`);
     }
-
-    // 7. Revalidate path (optional, might not be needed if client updates state)
-    // revalidatePath('/'); // Or the specific game page path
 
     // 8. Return Success
     const nextTurn =

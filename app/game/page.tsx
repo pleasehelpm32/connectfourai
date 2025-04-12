@@ -75,7 +75,7 @@ export default function GamePage() {
               setStatus((prev) => ({
                 ...prev,
                 gameStatus: gameStatus.status as GameStatus,
-                turn: gameStatus.turn,
+                turn: gameStatus.turn || null,
                 winner: gameStatus.winner || null,
                 board: gameStatus.board || prev.board,
               }));

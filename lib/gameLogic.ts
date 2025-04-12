@@ -1,6 +1,6 @@
 // lib/gameLogic.ts
 
-import type { Player, SlotState, BoardState } from "./types"; // Adjust path if types are elsewhere
+import type { Player, BoardState } from "./types"; // Adjust path if types are elsewhere
 
 // --- Constants ---
 export const ROWS = 6;

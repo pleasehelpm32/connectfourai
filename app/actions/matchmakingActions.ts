@@ -1,4 +1,5 @@
 // app/actions/matchmakingActions.ts
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use server";
 
 import { Prisma } from "@prisma/client";

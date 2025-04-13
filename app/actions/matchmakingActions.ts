@@ -26,22 +26,18 @@ interface MatchmakingResult {
 let playerCounter = 0;
 const generatePlayerId = () => `player_${Date.now()}_${playerCounter++}`;
 
-export async function findOrCreateGame(): Promise<MatchmakingResult> {
-  const newPlayerId = generatePlayerId(); // Generate an ID for the player requesting a game
-
+export async function findOrCreateGame(
+  userId: string
+): Promise<MatchmakingResult> {
   try {
-    console.log("Attempting database connection for matchmaking");
-
-    // Test database connection first
-    const testConnection = await db.$queryRaw`SELECT 1 as test`;
-    console.log("Database connection successful:", testConnection);
     // Use a transaction to prevent race conditions
     const result = await db.$transaction(async (tx) => {
       // 1. Look for a game waiting for player 2
       const waitingGame = await tx.game.findFirst({
         where: {
           status: "WAITING",
-          player2Id: null, // Explicitly look for games needing player 2
+          player2Id: null, // Game needs player 2
+          player1Id: { not: userId }, // Don't match with self
         },
         orderBy: {
           createdAt: "asc", // Find the oldest waiting game
@@ -53,21 +49,18 @@ export async function findOrCreateGame(): Promise<MatchmakingResult> {
         const updatedGame = await tx.game.update({
           where: { id: waitingGame.id },
           data: {
-            player2Id: newPlayerId, // Assign the new player as Player 2
-            status: "ACTIVE", // Set the game to active
+            player2Id: userId, // Assign the user as Player 2
+            status: "ACTIVE",
           },
         });
 
-        console.log(
-          `Player ${newPlayerId} joined game ${updatedGame.id} as BLUE`
-        );
         return {
           success: true,
           message: "You've been matched! You are BLUE. Red starts.",
           gameId: updatedGame.id,
           playerColor: "BLUE" as Player,
-          board: createInitialBoard(), // Start with a fresh board
-          turn: "RED" as Player, // Red always starts
+          board: createInitialBoard(),
+          turn: "RED" as Player,
           status: updatedGame.status,
         };
       }
@@ -75,35 +68,28 @@ export async function findOrCreateGame(): Promise<MatchmakingResult> {
       else {
         const newGame = await tx.game.create({
           data: {
-            player1Id: newPlayerId, // The new player is Player 1 (Red)
-            status: "WAITING", // Set status to waiting
-            // player2Id remains null
+            player1Id: userId, // The user is Player 1 (Red)
+            status: "WAITING",
           },
         });
-        console.log(
-          `Player ${newPlayerId} created game ${newGame.id} as RED, waiting.`
-        );
+
         return {
           success: true,
           message: "Created new game. You are RED. Waiting for opponent...",
           gameId: newGame.id,
           playerColor: "RED" as Player,
           board: createInitialBoard(),
-          turn: null, // No turns until game is active
+          turn: null,
           status: newGame.status,
         };
       }
-    }); // End of transaction
+    });
 
-    return result as MatchmakingResult; // Cast result
+    return result as MatchmakingResult;
   } catch (error) {
-    console.error("Detailed error in findOrCreateGame:", error);
     console.error("Error in findOrCreateGame:", error);
-    let errorMessage =
-      "Failed to find or create game due to an unexpected error.";
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      errorMessage = `Database error (${error.code}) prevented finding/creating game.`;
-    } else if (error instanceof Error) {
+    let errorMessage = "Failed to find or create game.";
+    if (error instanceof Error) {
       errorMessage = error.message;
     }
     return { success: false, message: errorMessage };

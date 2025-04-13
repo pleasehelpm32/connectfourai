@@ -5,16 +5,19 @@ import React, { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
 import GameBoard from "@/components/game/GameBoard";
 import GameInfo from "@/components/game/GameInfo";
+import UsernameForm from "@/components/user/UsernameForm";
+import UserStats from "@/components/user/UserStats";
 import { createInitialBoard, makeMove } from "@/lib/gameLogic";
 import type { Player, BoardState } from "@/lib/types";
-
 import { handleMakeMove } from "@/app/actions/gameActions";
 import {
   findOrCreateGame,
   checkGameStatus,
 } from "@/app/actions/matchmakingActions";
-import type { GameStatus } from "@prisma/client"; // Import Prisma enum type
+import type { GameStatus } from "@prisma/client";
 import { getGameCounts } from "@/app/actions/countActions";
+import { useUser } from "@/app/hooks/useUser";
+
 interface GamePageState {
   turn: Player | null;
   playerCount: number;
@@ -27,6 +30,7 @@ interface GamePageState {
 }
 
 export default function GamePage() {
+  const { userId, username, isLoading: userLoading, setUsername } = useUser();
   const [isPending, startTransition] = useTransition();
   // Add transition state specifically for finding game
   const [isFindingGame, startFindingGameTransition] = useTransition();
@@ -126,10 +130,14 @@ export default function GamePage() {
 
   // Function to find/create game using server action
   const handleFindGame = () => {
+    if (!userId) {
+      toast.error("Unable to identify user. Please refresh the page.");
+      return;
+    }
     startFindingGameTransition(async () => {
       console.log("Attempting to find or create game...");
       try {
-        const result = await findOrCreateGame();
+        const result = await findOrCreateGame(userId);
 
         if (
           result.success &&
@@ -216,6 +224,13 @@ export default function GamePage() {
       }
     });
   };
+  if (userLoading) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center">
+        <div className="animate-pulse text-lg">Loading user data...</div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-50 dark:bg-gray-900">
@@ -223,12 +238,22 @@ export default function GamePage() {
         Connect 4
       </h1>
 
+      {/* Username Management */}
+      {userId && username && (
+        <div className="w-full max-w-md mb-6">
+          <UsernameForm
+            userId={userId}
+            currentUsername={username}
+            onUpdate={setUsername}
+          />
+        </div>
+      )}
+
       <div className="flex flex-col lg:flex-row items-center lg:items-start gap-6 md:gap-10">
         {/* Game Board Area */}
         <div className="flex-shrink-0">
           <GameBoard
             boardState={status.board}
-            // Disable board clicks if game not active, not user's turn, or during actions
             disabled={
               status.gameStatus !== "ACTIVE" ||
               status.turn !== status.myColor ||
@@ -253,15 +278,24 @@ export default function GamePage() {
             onPlayClick={handleFindGame}
             winner={status.winner}
             gameStatus={status.gameStatus}
-            gameId={status.gameId} // Pass gameId
-            findingGame={isFindingGame} // Pass finding game state
+            gameId={status.gameId}
+            findingGame={isFindingGame}
             myColor={status.myColor}
+            username={username || "Guest"} // Pass username to GameInfo
           />
         </div>
       </div>
 
+      {/* User Stats */}
+      {userId && (
+        <div className="w-full max-w-3xl mt-8">
+          <h2 className="text-xl font-bold mb-4">Your Stats</h2>
+          <UserStats userId={userId} />
+        </div>
+      )}
+
       <footer className="mt-8 text-xs text-gray-500">
-        Connect 4 Game - Phase I
+        Connect 4 Game - Phase II
       </footer>
     </main>
   );

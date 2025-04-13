@@ -35,7 +35,9 @@ model Game {
   player2Id String? // Identifier for Player 2 (Blue) - null initially
 
   moves     Move[] // Relation to moves made in this game
-
+  redPlayer  User? @relation("PlayerRed", fields: [player1Id], references: [id])
+  bluePlayer User? @relation("PlayerBlue", fields: [player2Id], references: [id])
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -48,7 +50,7 @@ model Move {
   player    Player // Which color piece was dropped (RED or BLUE)
   column    Int // The column index (0-6) where the piece was dropped
   moveOrder Int // The sequence number of the move within the game (1, 2, 3...)
-
+  user      User?    @relation(fields: [playerId], references: [id])
   game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade) // Relation back to the Game
 
   createdAt DateTime @default(now())
@@ -57,4 +59,17 @@ model Move {
   @@unique([gameId, moveOrder])
   // Index for quickly fetching moves for a game in order
   @@index([gameId, moveOrder])
+}
+
+model User {
+  id        String   @id @default(cuid()) // UUID for user
+  name      String   @unique // Unique username
+  createdAt DateTime @default(now())
+  
+  // Relations to games as each player
+  gamesAsRed   Game[] @relation("PlayerRed")
+  gamesAsBlue  Game[] @relation("PlayerBlue")
+  
+  // Relation to moves
+  moves      Move[]
 }

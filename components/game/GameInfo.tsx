@@ -14,6 +14,7 @@ interface GameInfoProps {
   gameId: string | null; // Add gameId to props
   findingGame: boolean; // Add this to know when the "Find Game" action is in progress
   myColor: Player | null;
+  username: string;
 }
 
 const GameInfo: React.FC<GameInfoProps> = ({
@@ -26,6 +27,7 @@ const GameInfo: React.FC<GameInfoProps> = ({
   gameId,
   findingGame = false,
   myColor,
+  username,
 }) => {
   let statusText: string;
   let statusColor: string = "text-gray-500";
@@ -71,7 +73,7 @@ const GameInfo: React.FC<GameInfoProps> = ({
   }
 
   // Color indicator for current player
-  const colorIndicator = myColor ? `(You are ${myColor})` : "";
+  const colorIndicator = myColor ? `(${username} is ${myColor})` : "";
 
   // Play button logic
   const showPlayButton =

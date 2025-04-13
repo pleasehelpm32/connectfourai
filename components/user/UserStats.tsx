@@ -1,4 +1,5 @@
 // components/user/UserStats.tsx
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import React, { useEffect, useState } from "react";

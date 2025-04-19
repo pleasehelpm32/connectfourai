@@ -56,7 +56,7 @@ const GameInfo: React.FC<GameInfoProps> = ({
         <ul className="list-disc pl-5 space-y-1">
           <li>The center column gives you more winning opportunities</li>
           <li>Try to create multiple threats at once</li>
-          <li>Block your opponent's potential connecting moves</li>
+          <li>Block your opponent&rsquo;s potential connecting moves</li>
           <li>Ask the AI assistant for specific advice</li>
         </ul>
       </div>

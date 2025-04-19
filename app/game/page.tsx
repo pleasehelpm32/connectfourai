@@ -1,4 +1,7 @@
 // Updated app/game/page.tsx layout
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client";
 
 import React from "react";
@@ -120,7 +123,9 @@ export default function GamePage() {
                   {gameState.turn === gameState.myColor ? (
                     <span className="text-green-600">Your Turn</span>
                   ) : (
-                    <span className="text-blue-600">Computer's Turn...</span>
+                    <span className="text-blue-600">
+                      Computer&rsquo;s Turn...
+                    </span>
                   )}
                 </div>
               )}
@@ -130,7 +135,7 @@ export default function GamePage() {
                   {gameState.winner === gameState.myColor ? (
                     <span className="text-green-600 font-bold">You WIN!</span>
                   ) : gameState.winner === "TIE" ? (
-                    <span className="text-yellow-600">It's a Tie!</span>
+                    <span className="text-yellow-600">It&rsquo;s a Tie!</span>
                   ) : (
                     <span className="text-red-600">Computer Wins</span>
                   )}

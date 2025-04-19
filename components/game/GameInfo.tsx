@@ -1,4 +1,6 @@
 // components/game/GameInfo.tsx
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import React from "react";
 import { Button } from "@/components/ui/button";
 import type { Player } from "@/lib/types";

@@ -83,19 +83,20 @@ export default function UsernameForm({
   if (!isEditing) {
     return (
       <div
-        className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        className="flex items-center justify-between h-10 px-3 bg-gray-100 dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm"
         onClick={() => setIsEditing(true)}
       >
-        <span className="font-medium">{currentUsername}</span>
+        <span className="font-medium truncate">{currentUsername}</span>
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
+          className="h-7 px-2"
           onClick={(e) => {
-            e.stopPropagation(); // Prevent the div's onClick from firing
+            e.stopPropagation();
             setIsEditing(true);
           }}
         >
-          Edit Name
+          Edit
         </Button>
       </div>
     );
@@ -108,18 +109,19 @@ export default function UsernameForm({
         onChange={(e) => setUsername(e.target.value)}
         placeholder="Enter username"
         disabled={isLoading}
-        className="w-full"
+        className="w-full h-10 text-sm"
         maxLength={20}
         minLength={3}
         pattern="[a-zA-Z0-9_]+"
         title="Letters, numbers, and underscores only"
-        autoFocus // Focus the input when it appears
+        autoFocus
       />
       <div className="flex justify-end space-x-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="h-7 px-2 text-xs"
           onClick={() => {
             setUsername(currentUsername);
             setIsEditing(false);
@@ -131,6 +133,7 @@ export default function UsernameForm({
         <Button
           type="submit"
           size="sm"
+          className="h-7 px-2 text-xs"
           disabled={isLoading || username === currentUsername}
         >
           {isLoading ? "Saving..." : "Save"}

@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { updateUsername } from "@/app/actions/userActions";
+import { supabase } from "@/lib/supabaseClient";
 
 interface UsernameFormProps {
   userId: string;
@@ -32,19 +32,48 @@ export default function UsernameForm({
       return;
     }
 
+    // Validate username (3-20 chars, alphanumeric + underscore)
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+      toast.error(
+        "Username must be 3-20 characters and contain only letters, numbers, and underscores."
+      );
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const result = await updateUsername(userId, username);
+      // Check if name is already taken
+      const { data: existingUser, error: checkError } = await supabase
+        .from("User")
+        .select("id")
+        .eq("name", username)
+        .neq("id", userId)
+        .maybeSingle();
 
-      if (result.success) {
-        toast.success("Username updated successfully!");
-        onUpdate(result.name || "");
-        setIsEditing(false);
-      } else {
-        toast.error(result.message || "Failed to update username");
+      if (checkError) throw checkError;
+
+      if (existingUser) {
+        toast.error("Username is already taken");
+        setIsLoading(false);
+        return;
       }
+
+      // Update the username
+      const { data: updatedUser, error: updateError } = await supabase
+        .from("User")
+        .update({ name: username })
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      toast.success("Username updated successfully!");
+      onUpdate(updatedUser.name);
+      setIsEditing(false);
     } catch (error) {
+      console.error("Error updating username:", error);
       toast.error("An error occurred while updating username");
     } finally {
       setIsLoading(false);
@@ -53,9 +82,19 @@ export default function UsernameForm({
 
   if (!isEditing) {
     return (
-      <div className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
+      <div
+        className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        onClick={() => setIsEditing(true)}
+      >
         <span className="font-medium">{currentUsername}</span>
-        <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent the div's onClick from firing
+            setIsEditing(true);
+          }}
+        >
           Edit Name
         </Button>
       </div>
@@ -74,6 +113,7 @@ export default function UsernameForm({
         minLength={3}
         pattern="[a-zA-Z0-9_]+"
         title="Letters, numbers, and underscores only"
+        autoFocus // Focus the input when it appears
       />
       <div className="flex justify-end space-x-2">
         <Button

@@ -1,229 +1,25 @@
-// app/(game)/page.tsx
+// app/game/page.tsx
 "use client";
 
-import React, { useState, useTransition, useEffect } from "react";
-import { toast } from "sonner";
+import React from "react";
 import GameBoard from "@/components/game/GameBoard";
 import GameInfo from "@/components/game/GameInfo";
 import UsernameForm from "@/components/user/UsernameForm";
-import UserStats from "@/components/user/UserStats";
-import { createInitialBoard, makeMove } from "@/lib/gameLogic";
-import type { Player, BoardState } from "@/lib/types";
-import { handleMakeMove } from "@/app/actions/gameActions";
-import {
-  findOrCreateGame,
-  checkGameStatus,
-} from "@/app/actions/matchmakingActions";
-import type { GameStatus } from "@prisma/client";
-import { getGameCounts } from "@/app/actions/countActions";
-import { useUser } from "@/app/hooks/useUser";
 
-interface GamePageState {
-  turn: Player | null;
-  playerCount: number;
-  queueCount: number;
-  board: BoardState;
-  gameId: string | null;
-  winner: Player | "TIE" | null;
-  gameStatus: GameStatus; // Use Prisma enum type
-  myColor: Player | null; // Store the color assigned to this client
-}
+import { useUser } from "@/app/hooks/useUser";
+import { useGame } from "@/app/hooks/useGame";
 
 export default function GamePage() {
   const { userId, username, isLoading: userLoading, setUsername } = useUser();
-  const [isPending, startTransition] = useTransition();
-  // Add transition state specifically for finding game
-  const [isFindingGame, startFindingGameTransition] = useTransition();
 
-  const [status, setStatus] = useState<GamePageState>({
-    turn: null,
-    playerCount: 0,
-    queueCount: 0,
-    board: createInitialBoard(),
-    gameId: null,
-    winner: null,
-    gameStatus: "WAITING" as GameStatus, // Default to WAITING initially
-    myColor: null, // Initialize player color as null
-  });
+  const {
+    gameState,
+    isPending,
+    isFindingGame,
+    findOrCreateGame,
+    makePlayerMove,
+  } = useGame(userId);
 
-  // In game/page.tsx, update the useEffect:
-  useEffect(() => {
-    // Function to fetch counts and update state
-    const fetchCounts = async () => {
-      try {
-        // Get player counts
-        const counts = await getGameCounts();
-
-        // Update state with new counts
-        setStatus((prev) => ({
-          ...prev,
-          playerCount: counts.playingCount,
-          queueCount: counts.waitingCount,
-        }));
-
-        // If we have a gameId, check for game updates (both for waiting and active games)
-        if (status.gameId) {
-          const gameStatus = await checkGameStatus(status.gameId);
-
-          if (gameStatus.success) {
-            // Check if there are any meaningful updates
-            const boardChanged =
-              gameStatus.board &&
-              JSON.stringify(gameStatus.board) !== JSON.stringify(status.board);
-            const statusChanged = gameStatus.status !== status.gameStatus;
-            const turnChanged = gameStatus.turn !== status.turn;
-            const winnerChanged = gameStatus.winner !== status.winner;
-
-            // Update state if anything has changed
-            if (boardChanged || statusChanged || turnChanged || winnerChanged) {
-              setStatus((prev) => ({
-                ...prev,
-                gameStatus: gameStatus.status as GameStatus,
-                turn: gameStatus.turn || null,
-                winner: gameStatus.winner || null,
-                board: gameStatus.board || prev.board,
-              }));
-
-              // Show toast messages for key state changes
-              if (
-                gameStatus.status === "ACTIVE" &&
-                status.gameStatus !== "ACTIVE"
-              ) {
-                toast.success("Game started! Opponent has joined.");
-              }
-
-              if (
-                gameStatus.status === "COMPLETED" &&
-                status.gameStatus !== "COMPLETED"
-              ) {
-                if (gameStatus.winner === "TIE") {
-                  toast.success("Game Over: It's a TIE!");
-                } else if (gameStatus.winner) {
-                  toast.success(`Game Over: ${gameStatus.winner} Wins!`);
-                }
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Polling error:", error);
-      }
-    };
-
-    // Fetch counts immediately on component mount
-    fetchCounts();
-
-    // Set up interval to poll more frequently (every 2 seconds)
-    const intervalId = setInterval(fetchCounts, 2000);
-
-    // Cleanup function to clear interval when component unmounts
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [
-    status.gameId,
-    status.gameStatus,
-    status.turn,
-    status.winner,
-    status.board,
-  ]);
-
-  // Function to find/create game using server action
-  const handleFindGame = () => {
-    if (!userId) {
-      toast.error("Unable to identify user. Please refresh the page.");
-      return;
-    }
-    startFindingGameTransition(async () => {
-      console.log("Attempting to find or create game...");
-      try {
-        const result = await findOrCreateGame(userId);
-
-        if (
-          result.success &&
-          result.gameId &&
-          result.playerColor &&
-          result.board
-        ) {
-          setStatus((prev) => ({
-            ...prev,
-            gameId: result.gameId || null,
-            myColor: result.playerColor || null,
-            board: result.board || createInitialBoard(),
-            turn: result.turn || null,
-            gameStatus: result.status as GameStatus,
-            winner: null,
-          }));
-          toast.info(result.message);
-        } else {
-          console.error("Matchmaking failed:", result.message);
-          toast.error(result.message || "Failed to find or create game.");
-        }
-      } catch (error) {
-        console.error("Error in findOrCreateGame:", error);
-        toast.error("An unexpected error occurred while finding a game.");
-      }
-    });
-  };
-
-  // Function to handle column clicks
-  const handleColumnClick = (columnIndex: number) => {
-    // Prevent moves if not active, not player's turn, action pending, or color not assigned
-    if (
-      status.gameStatus !== "ACTIVE" ||
-      !status.turn ||
-      !status.gameId ||
-      isPending ||
-      status.turn !== status.myColor
-    ) {
-      if (status.turn && status.myColor && status.turn !== status.myColor) {
-        toast.warning("Not your turn!");
-      }
-      console.log("Move prevented:", {
-        status: status.gameStatus,
-        turn: status.turn,
-        myColor: status.myColor,
-        gameId: status.gameId,
-        isPending,
-      });
-      return;
-    }
-
-    const currentPlayer = status.turn;
-    const currentBoard = status.board;
-
-    startTransition(async () => {
-      try {
-        const result = await handleMakeMove(status.gameId, columnIndex);
-
-        if (result.success && result.newState) {
-          const nextBoard = makeMove(currentBoard, columnIndex, currentPlayer);
-
-          setStatus((prev) => ({
-            ...prev,
-            board: nextBoard,
-            turn: result.newState!.turn,
-            winner: result.newState!.winner,
-            gameStatus: result.newState!.status as GameStatus,
-          }));
-
-          if (result.newState.winner) {
-            if (result.newState.winner === "TIE") {
-              toast.success("Game Over: It's a TIE!");
-            } else {
-              toast.success(`Game Over: ${result.newState.winner} Wins!`);
-            }
-          }
-        } else {
-          console.error("Server Action failed:", result.message);
-          toast.error(result.message || "Failed to make move.");
-        }
-      } catch (error) {
-        console.error("Error calling server action:", error);
-        toast.error("An unexpected error occurred while making the move.");
-      }
-    });
-  };
   if (userLoading) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center">
@@ -253,14 +49,14 @@ export default function GamePage() {
         {/* Game Board Area */}
         <div className="flex-shrink-0">
           <GameBoard
-            boardState={status.board}
+            boardState={gameState.board}
             disabled={
-              status.gameStatus !== "ACTIVE" ||
-              status.turn !== status.myColor ||
+              gameState.gameStatus !== "ACTIVE" ||
+              gameState.turn !== gameState.myColor ||
               isPending ||
               isFindingGame
             }
-            onColumnClick={handleColumnClick}
+            onColumnClick={makePlayerMove}
           />
           {(isPending || isFindingGame) && (
             <p className="text-center mt-2 text-sm text-gray-500">
@@ -272,30 +68,22 @@ export default function GamePage() {
         {/* Game Info & Controls Area */}
         <div className="w-full lg:w-64 flex-shrink-0">
           <GameInfo
-            turn={status.turn}
-            playerCount={status.playerCount}
-            queueCount={status.queueCount}
-            onPlayClick={handleFindGame}
-            winner={status.winner}
-            gameStatus={status.gameStatus}
-            gameId={status.gameId}
+            turn={gameState.turn}
+            playerCount={gameState.playerCount}
+            queueCount={gameState.queueCount}
+            onPlayClick={findOrCreateGame}
+            winner={gameState.winner}
+            gameStatus={gameState.gameStatus}
+            gameId={gameState.gameId}
             findingGame={isFindingGame}
-            myColor={status.myColor}
-            username={username || "Guest"} // Pass username to GameInfo
+            myColor={gameState.myColor}
+            username={username || "Guest"}
           />
         </div>
       </div>
 
-      {/* User Stats */}
-      {userId && (
-        <div className="w-full max-w-3xl mt-8">
-          <h2 className="text-xl font-bold mb-4">Your Stats</h2>
-          <UserStats userId={userId} />
-        </div>
-      )}
-
       <footer className="mt-8 text-xs text-gray-500">
-        Connect 4 Game - Phase II
+        Connect 4 Game - Real-time Edition
       </footer>
     </main>
   );
